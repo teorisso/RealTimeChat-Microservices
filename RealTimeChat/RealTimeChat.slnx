@@ -1,1 +1,6 @@
-<Solution />
+<Solution>
+  <Project Path="AuthService/AuthService.csproj" Id="493f1907-2856-478e-bc13-4e6f15541f07" />
+  <Project Path="GroupsService/GroupsService.csproj" Id="0b15a305-6ffc-45ea-b05c-1abb8683e3ed" />
+  <Project Path="MessagesService/MessagesService.csproj" Id="3795866c-87c0-4f31-a15e-28e664761064" />
+  <Project Path="Shared/Shared.csproj" Id="92473f00-31ba-46f9-b92e-035c8d3da1b5" />
+</Solution>
