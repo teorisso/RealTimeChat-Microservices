@@ -23,5 +23,15 @@ namespace AuthService.Entities
 
         // Opcional: Fecha de registro para auditoría
         public DateTime FechaRegistro { get; set; } = DateTime.UtcNow;
+
+        // Campos adicionales para autenticación
+        [MaxLength(500)]
+        public string? AvatarUrl { get; set; }
+
+        public string? RefreshToken { get; set; }
+
+        public DateTime? RefreshTokenExpiryTime { get; set; }
+
+        public bool Activo { get; set; } = true;
     }
 }
