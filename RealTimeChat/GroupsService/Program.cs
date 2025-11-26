@@ -87,9 +87,9 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var context = services.GetRequiredService<GroupsDbContext>();
-        var historyExists = await EfHistoryExists(context);
+        var groupsMigrationExists = await GroupsMigrationExists(context);
 
-        if (!historyExists)
+        if (!groupsMigrationExists)
         {
             await context.Database.MigrateAsync();
         }
@@ -140,8 +140,8 @@ static async Task SeedData(GroupsDbContext context)
     // Por ahora no agregamos datos de prueba
 }
 
-// Evita que EF intente recrear la tabla de historial de migraciones cuando ya existe (pooler IPv4).
-static async Task<bool> EfHistoryExists(GroupsDbContext context)
+// Verifica si las migraciones específicas de GroupsService ya están aplicadas
+static async Task<bool> GroupsMigrationExists(GroupsDbContext context)
 {
     var conn = context.Database.GetDbConnection();
     var wasClosed = conn.State == ConnectionState.Closed;
@@ -154,17 +154,22 @@ static async Task<bool> EfHistoryExists(GroupsDbContext context)
     try
     {
         await using var cmd = conn.CreateCommand();
+        // Verificar si existe la migración específica de GroupsService
         cmd.CommandText = """
             select exists (
                 select 1
-                from pg_catalog.pg_class c
-                join pg_namespace n on n.oid = c.relnamespace
-                where n.nspname = 'public' and c.relname = '__EFMigrationsHistory'
+                from "__EFMigrationsHistory"
+                where "MigrationId" = '20251126161627_InitialGroupsSchema'
             );
             """;
 
         var result = await cmd.ExecuteScalarAsync();
         return result is bool b && b;
+    }
+    catch
+    {
+        // Si la tabla __EFMigrationsHistory no existe, retornar false
+        return false;
     }
     finally
     {
