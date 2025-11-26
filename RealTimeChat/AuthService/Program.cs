@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Swashbuckle.AspNetCore.SwaggerGen;
+using System.Data;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -87,7 +88,12 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var context = services.GetRequiredService<AppDbContext>();
-        context.Database.Migrate();
+        var historyExists = await EfHistoryExists(context);
+
+        if (!historyExists)
+        {
+            await context.Database.MigrateAsync();
+        }
 
         // SEED DATA
         await SeedData(context);
@@ -124,6 +130,13 @@ app.Run();
 // MÉTODO DE SEED DATA
 static async Task SeedData(AppDbContext context)
 {
+    // Evita fallos de seeding sobre el pooler IPv4; en ese caso sembrar manualmente.
+    var cs = context.Database.GetConnectionString() ?? string.Empty;
+    if (cs.Contains("pooler.supabase.com", StringComparison.OrdinalIgnoreCase))
+    {
+        return;
+    }
+
     // Solo crear usuarios de prueba si no existen
     if (!await context.Usuarios.AnyAsync())
     {
@@ -149,5 +162,40 @@ static async Task SeedData(AppDbContext context)
 
         context.Usuarios.AddRange(usuarios);
         await context.SaveChangesAsync();
+    }
+}
+
+// Evita que EF intente recrear la tabla de historial de migraciones cuando ya existe (pooler IPv4).
+static async Task<bool> EfHistoryExists(AppDbContext context)
+{
+    var conn = context.Database.GetDbConnection();
+    var wasClosed = conn.State == ConnectionState.Closed;
+
+    if (wasClosed)
+    {
+        await conn.OpenAsync();
+    }
+
+    try
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            select exists (
+                select 1
+                from pg_catalog.pg_class c
+                join pg_namespace n on n.oid = c.relnamespace
+                where n.nspname = 'public' and c.relname = '__EFMigrationsHistory'
+            );
+            """;
+
+        var result = await cmd.ExecuteScalarAsync();
+        return result is bool b && b;
+    }
+    finally
+    {
+        if (wasClosed && conn.State == ConnectionState.Open)
+        {
+            await conn.CloseAsync();
+        }
     }
 }
