@@ -19,6 +19,7 @@ namespace MessagesService.Services
         // Read Receipts
         Task<bool> MarkMessageAsReadAsync(int messageId, int userId);
         Task<List<ReadReceiptDto>> GetMessageReadReceiptsAsync(int messageId, int userId);
+        Task<int?> GetConversationIdByMessageIdAsync(int messageId);
 
         // Authorization
         Task<bool> IsUserInConversationAsync(int conversationId, int userId);

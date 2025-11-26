@@ -373,6 +373,24 @@ namespace MessagesService.Services
             }
         }
 
+        public async Task<int?> GetConversationIdByMessageIdAsync(int messageId)
+        {
+            try
+            {
+                var conversacionId = await _context.Mensajes
+                    .Where(m => m.Id == messageId)
+                    .Select(m => m.ConversacionId)
+                    .FirstOrDefaultAsync();
+
+                return conversacionId == 0 ? null : conversacionId;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener conversationId para mensaje {MessageId}", messageId);
+                return null;
+            }
+        }
+
         public async Task<List<ReadReceiptDto>> GetMessageReadReceiptsAsync(int messageId, int userId)
         {
             try

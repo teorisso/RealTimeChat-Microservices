@@ -142,14 +142,23 @@ namespace MessagesService.Hubs
             {
                 var userId = GetUserId();
 
+                // Obtener el conversationId del mensaje
+                var conversationId = await _messageService.GetConversationIdByMessageIdAsync(messageId);
+
+                if (!conversationId.HasValue)
+                {
+                    _logger.LogWarning("Mensaje {MessageId} no encontrado", messageId);
+                    return;
+                }
+
+                // Marcar como leído
                 var success = await _messageService.MarkMessageAsReadAsync(messageId, userId);
 
                 if (success)
                 {
-                    // Obtener la conversación del mensaje para broadcast
-                    var mensaje = await _messageService.GetMessagesAsync(0, userId, 1, 1); // Placeholder, necesitaríamos obtener el conversationId del mensaje
+                    var groupName = $"conversation_{conversationId.Value}";
 
-                    // Broadcast el read receipt
+                    // Crear read receipt con timestamp actual
                     var readReceipt = new ReadReceiptDto
                     {
                         Id = Guid.NewGuid().ToString(),
@@ -159,10 +168,11 @@ namespace MessagesService.Hubs
                         FechaLectura = DateTime.UtcNow
                     };
 
-                    // Note: Necesitaríamos el conversationId para hacer el broadcast correcto
-                    // await Clients.Group($"conversation_{conversationId}").SendAsync("ReceiveReadReceipt", readReceipt);
+                    // Broadcast del read receipt a todos en la conversación
+                    await Clients.Group(groupName).SendAsync("ReceiveReadReceipt", readReceipt);
 
-                    _logger.LogInformation("Mensaje {MessageId} marcado como leído por usuario {UserId}", messageId, userId);
+                    _logger.LogInformation("Mensaje {MessageId} marcado como leído por usuario {UserId} y broadcast enviado a conversación {ConversationId}",
+                        messageId, userId, conversationId.Value);
                 }
             }
             catch (Exception ex)
