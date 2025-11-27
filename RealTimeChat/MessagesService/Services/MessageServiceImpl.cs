@@ -10,11 +10,16 @@ namespace MessagesService.Services
     {
         private readonly MessagesDbContext _context;
         private readonly ILogger<MessageServiceImpl> _logger;
+        private readonly IUserInfoService _userInfoService;
 
-        public MessageServiceImpl(MessagesDbContext context, ILogger<MessageServiceImpl> logger)
+        public MessageServiceImpl(
+            MessagesDbContext context,
+            ILogger<MessageServiceImpl> logger,
+            IUserInfoService userInfoService)
         {
             _context = context;
             _logger = logger;
+            _userInfoService = userInfoService;
         }
 
         // ===== CONVERSACIONES =====
@@ -120,22 +125,29 @@ namespace MessagesService.Services
                     return null;
 
                 // Obtener último mensaje
-                var ultimoMensaje = await _context.Mensajes
+                var ultimoMensajeEntity = await _context.Mensajes
                     .Where(m => m.ConversacionId == conversationId && !m.Eliminado)
+                    .Include(m => m.Lecturas)
                     .OrderByDescending(m => m.FechaEnvio)
-                    .Select(m => new MessageDto
-                    {
-                        Id = m.Id.ToString(),
-                        ConversacionId = m.ConversacionId.ToString(),
-                        RemitenteId = m.RemitenteId.ToString(),
-                        RemitenteNombre = "",
-                        Contenido = m.Contenido,
-                        FechaEnvio = m.FechaEnvio,
-                        Eliminado = m.Eliminado,
-                        CantidadLecturas = m.Lecturas.Count,
-                        LeidoPorMi = m.Lecturas.Any(l => l.UsuarioId == userId)
-                    })
                     .FirstOrDefaultAsync();
+
+                MessageDto? ultimoMensaje = null;
+                if (ultimoMensajeEntity != null)
+                {
+                    var remitenteNombre = await _userInfoService.GetUserNameAsync(ultimoMensajeEntity.RemitenteId);
+                    ultimoMensaje = new MessageDto
+                    {
+                        Id = ultimoMensajeEntity.Id.ToString(),
+                        ConversacionId = ultimoMensajeEntity.ConversacionId.ToString(),
+                        RemitenteId = ultimoMensajeEntity.RemitenteId.ToString(),
+                        RemitenteNombre = remitenteNombre,
+                        Contenido = ultimoMensajeEntity.Contenido,
+                        FechaEnvio = ultimoMensajeEntity.FechaEnvio,
+                        Eliminado = ultimoMensajeEntity.Eliminado,
+                        CantidadLecturas = ultimoMensajeEntity.Lecturas.Count,
+                        LeidoPorMi = ultimoMensajeEntity.Lecturas.Any(l => l.UsuarioId == userId)
+                    };
+                }
 
                 // Contar mensajes no leídos
                 var mensajesNoLeidos = await _context.Mensajes
@@ -249,12 +261,14 @@ namespace MessagesService.Services
                 _context.Mensajes.Add(mensaje);
                 await _context.SaveChangesAsync();
 
+                var remitenteNombre = await _userInfoService.GetUserNameAsync(userId);
+
                 return new MessageDto
                 {
                     Id = mensaje.Id.ToString(),
                     ConversacionId = mensaje.ConversacionId.ToString(),
                     RemitenteId = mensaje.RemitenteId.ToString(),
-                    RemitenteNombre = "",
+                    RemitenteNombre = remitenteNombre,
                     Contenido = mensaje.Contenido,
                     FechaEnvio = mensaje.FechaEnvio,
                     Eliminado = mensaje.Eliminado,
@@ -277,26 +291,32 @@ namespace MessagesService.Services
                 if (!await IsUserInConversationAsync(conversationId, userId))
                     return new List<MessageDto>();
 
-                var mensajes = await _context.Mensajes
+                var mensajesEntities = await _context.Mensajes
                     .Where(m => m.ConversacionId == conversationId)
+                    .Include(m => m.Lecturas)
                     .OrderByDescending(m => m.FechaEnvio)
                     .Skip((page - 1) * pageSize)
                     .Take(pageSize)
-                    .Select(m => new MessageDto
-                    {
-                        Id = m.Id.ToString(),
-                        ConversacionId = m.ConversacionId.ToString(),
-                        RemitenteId = m.RemitenteId.ToString(),
-                        RemitenteNombre = "",
-                        Contenido = m.Contenido,
-                        FechaEnvio = m.FechaEnvio,
-                        Eliminado = m.Eliminado,
-                        CantidadLecturas = m.Lecturas.Count,
-                        LeidoPorMi = m.Lecturas.Any(l => l.UsuarioId == userId)
-                    })
                     .ToListAsync();
 
-                return mensajes.OrderBy(m => m.FechaEnvio).ToList();
+                // Obtener todos los remitentes únicos
+                var remitenteIds = mensajesEntities.Select(m => m.RemitenteId).Distinct();
+                var nombresRemitentes = await _userInfoService.GetUserNamesAsync(remitenteIds);
+
+                var mensajes = mensajesEntities.Select(m => new MessageDto
+                {
+                    Id = m.Id.ToString(),
+                    ConversacionId = m.ConversacionId.ToString(),
+                    RemitenteId = m.RemitenteId.ToString(),
+                    RemitenteNombre = nombresRemitentes[m.RemitenteId],
+                    Contenido = m.Contenido,
+                    FechaEnvio = m.FechaEnvio,
+                    Eliminado = m.Eliminado,
+                    CantidadLecturas = m.Lecturas.Count,
+                    LeidoPorMi = m.Lecturas.Any(l => l.UsuarioId == userId)
+                }).OrderBy(m => m.FechaEnvio).ToList();
+
+                return mensajes;
             }
             catch (Exception ex)
             {
@@ -406,18 +426,23 @@ namespace MessagesService.Services
                 if (!await IsUserInConversationAsync(mensaje.ConversacionId, userId))
                     return new List<ReadReceiptDto>();
 
-                var receipts = await _context.MensajesLeidos
+                var receiptsEntities = await _context.MensajesLeidos
                     .Where(ml => ml.MensajeId == messageId)
-                    .Select(ml => new ReadReceiptDto
-                    {
-                        Id = ml.Id.ToString(),
-                        MensajeId = ml.MensajeId.ToString(),
-                        UsuarioId = ml.UsuarioId.ToString(),
-                        UsuarioNombre = "",
-                        FechaLectura = ml.FechaLectura
-                    })
-                    .OrderBy(r => r.FechaLectura)
+                    .OrderBy(ml => ml.FechaLectura)
                     .ToListAsync();
+
+                // Obtener todos los usuarios únicos
+                var usuarioIds = receiptsEntities.Select(ml => ml.UsuarioId).Distinct();
+                var nombresUsuarios = await _userInfoService.GetUserNamesAsync(usuarioIds);
+
+                var receipts = receiptsEntities.Select(ml => new ReadReceiptDto
+                {
+                    Id = ml.Id.ToString(),
+                    MensajeId = ml.MensajeId.ToString(),
+                    UsuarioId = ml.UsuarioId.ToString(),
+                    UsuarioNombre = nombresUsuarios[ml.UsuarioId],
+                    FechaLectura = ml.FechaLectura
+                }).ToList();
 
                 return receipts;
             }

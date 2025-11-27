@@ -12,11 +12,16 @@ namespace MessagesService.Hubs
     {
         private readonly IMessageService _messageService;
         private readonly ILogger<ChatHub> _logger;
+        private readonly IUserInfoService _userInfoService;
 
-        public ChatHub(IMessageService messageService, ILogger<ChatHub> logger)
+        public ChatHub(
+            IMessageService messageService,
+            ILogger<ChatHub> logger,
+            IUserInfoService userInfoService)
         {
             _messageService = messageService;
             _logger = logger;
+            _userInfoService = userInfoService;
         }
 
         public override async Task OnConnectedAsync()
@@ -117,11 +122,13 @@ namespace MessagesService.Hubs
 
                 var groupName = $"conversation_{conversacionId}";
 
+                var usuarioNombre = await _userInfoService.GetUserNameAsync(userId);
+
                 var typingIndicator = new TypingIndicatorDto
                 {
                     ConversacionId = conversacionId.ToString(),
                     UsuarioId = userId.ToString(),
-                    UsuarioNombre = "",
+                    UsuarioNombre = usuarioNombre,
                     IsTyping = isTyping
                 };
 
@@ -158,13 +165,15 @@ namespace MessagesService.Hubs
                 {
                     var groupName = $"conversation_{conversationId.Value}";
 
+                    var usuarioNombre = await _userInfoService.GetUserNameAsync(userId);
+
                     // Crear read receipt con timestamp actual
                     var readReceipt = new ReadReceiptDto
                     {
                         Id = Guid.NewGuid().ToString(),
                         MensajeId = messageId.ToString(),
                         UsuarioId = userId.ToString(),
-                        UsuarioNombre = "",
+                        UsuarioNombre = usuarioNombre,
                         FechaLectura = DateTime.UtcNow
                     };
 

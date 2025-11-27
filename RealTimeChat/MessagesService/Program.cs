@@ -93,6 +93,14 @@ builder.Services.AddCors(options =>
 // --- REGISTRAR SERVICIOS ---
 builder.Services.AddScoped<IMessageService, MessageServiceImpl>();
 
+// Servicio de consulta de nombres de usuarios con JWT propagation (REQ-10)
+builder.Services.AddHttpContextAccessor();  // CRÍTICO para propagar JWT
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient<IUserInfoService, UserInfoService>(client =>
+{
+    client.BaseAddress = new Uri("http://localhost:5257");
+});
+
 // --- CONFIGURACIÓN SIGNALR ---
 builder.Services.AddSignalR();
 
