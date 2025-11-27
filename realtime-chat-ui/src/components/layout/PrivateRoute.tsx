@@ -7,8 +7,10 @@ const PrivateRoute: React.FC = () => {
     const { isAuthenticated, isLoading, checkAuth } = useAuthStore();
 
     useEffect(() => {
-        checkAuth();
-    }, [checkAuth]);
+        if (!isAuthenticated) {
+            checkAuth();
+        }
+    }, [checkAuth, isAuthenticated]);
 
     if (isLoading) {
         return (

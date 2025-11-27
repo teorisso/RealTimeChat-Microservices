@@ -1,45 +1,45 @@
-import api from './api';
+import { messagesApi } from './api';
 import type { ConversationDto, MessageDto } from '../types';
 
 const MessageService = {
     getConversations: async () => {
-        const response = await api.get<ConversationDto[]>('/messages/conversations');
-        return response.data;
+        const response = await messagesApi.get<{ success: boolean; data: ConversationDto[] }>('/messages/conversations');
+        return response.data.data || [];
     },
 
     getConversationById: async (id: string) => {
-        const response = await api.get<ConversationDto>(`/messages/conversations/${id}`);
-        return response.data;
+        const response = await messagesApi.get<{ success: boolean; data: ConversationDto }>(`/messages/conversations/${id}`);
+        return response.data.data!;
     },
 
     getDirectConversation: async (otherUserId: string) => {
-        const response = await api.get<ConversationDto>(`/messages/conversations/direct/${otherUserId}`);
-        return response.data;
+        const response = await messagesApi.get<{ success: boolean; data: ConversationDto }>(`/messages/conversations/direct/${otherUserId}`);
+        return response.data.data!;
     },
 
     createConversation: async (data: { tipo: 'directa' | 'grupo'; otroUsuarioId?: number; grupoId?: number }) => {
-        const response = await api.post<ConversationDto>('/messages/conversations', data);
-        return response.data;
+        const response = await messagesApi.post<{ success: boolean; data: ConversationDto }>('/messages/conversations', data);
+        return response.data.data!;
     },
 
     getMessages: async (conversationId: string, page: number = 1, pageSize: number = 50) => {
-        const response = await api.get<MessageDto[]>(`/messages/${conversationId}`, {
+        const response = await messagesApi.get<{ success: boolean; data: MessageDto[] }>(`/messages/${conversationId}`, {
             params: { page, pageSize },
         });
-        return response.data;
+        return response.data.data || [];
     },
 
     sendMessage: async (data: { conversacionId: number; contenido: string }) => {
-        const response = await api.post<MessageDto>('/messages', data);
-        return response.data;
+        const response = await messagesApi.post<{ success: boolean; data: MessageDto }>('/messages', data);
+        return response.data.data!;
     },
 
     markAsRead: async (messageId: string) => {
-        await api.post(`/messages/${messageId}/read`);
+        await messagesApi.post(`/messages/${messageId}/read`);
     },
 
     getMessageReceipts: async (messageId: string) => {
-        const response = await api.get(`/messages/${messageId}/receipts`);
+        const response = await messagesApi.get(`/messages/${messageId}/receipts`);
         return response.data;
     },
 };

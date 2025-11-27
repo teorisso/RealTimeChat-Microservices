@@ -58,7 +58,7 @@ namespace MessagesService.Services
                 }
 
                 _context.Conversaciones.Add(conversacion);
-                await _context.SaveChangesAsync();
+                // Removed intermediate SaveChangesAsync to perform single atomic commit
 
                 // Agregar participantes
                 var participantes = new List<ParticipanteConversacion>();
@@ -67,7 +67,7 @@ namespace MessagesService.Services
                 {
                     participantes.Add(new ParticipanteConversacion
                     {
-                        ConversacionId = conversacion.Id,
+                        Conversacion = conversacion, // Use navigation property
                         UsuarioId = userId,
                         FechaUnion = DateTime.UtcNow,
                         Activo = true
@@ -75,7 +75,7 @@ namespace MessagesService.Services
 
                     participantes.Add(new ParticipanteConversacion
                     {
-                        ConversacionId = conversacion.Id,
+                        Conversacion = conversacion, // Use navigation property
                         UsuarioId = request.OtroUsuarioId!.Value,
                         FechaUnion = DateTime.UtcNow,
                         Activo = true
@@ -91,7 +91,7 @@ namespace MessagesService.Services
 
                     participantes.AddRange(miembros.Select(usuarioId => new ParticipanteConversacion
                     {
-                        ConversacionId = conversacion.Id,
+                        Conversacion = conversacion, // Use navigation property
                         UsuarioId = usuarioId,
                         FechaUnion = DateTime.UtcNow,
                         Activo = true

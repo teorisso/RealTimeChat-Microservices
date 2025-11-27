@@ -115,7 +115,13 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseHttpsRedirection();
+// Solo redireccionar a HTTPS en producción
+// En desarrollo, el frontend usa HTTP (localhost:5173) y el backend HTTP (localhost:5257)
+// La redirección HTTPS rompe las peticiones CORS preflight
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseCors();
 
