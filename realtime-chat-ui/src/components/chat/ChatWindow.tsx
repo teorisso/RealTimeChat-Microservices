@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import { useChatStore } from '../../store/chatStore';
 import { useAuthStore } from '../../store/authStore';
 import MessageBubble from './MessageBubble';
@@ -52,7 +52,7 @@ const ChatWindow: React.FC = () => {
         }
     };
 
-    const getConversationName = () => {
+    const conversationName = useMemo(() => {
         if (!activeConversation) return '';
         if (isGroup) return `Group ${activeConversation.grupoId}`; // Ideally fetch group name too
 
@@ -62,7 +62,7 @@ const ChatWindow: React.FC = () => {
 
         const otherUser = users.find(u => u.id === String(otherUserId));
         return otherUser?.nombre || `User ${otherUserId}`;
-    };
+    }, [activeConversation, isGroup, currentUser?.id, users]);
 
     if (!activeConversationId) {
         return (
@@ -91,7 +91,7 @@ const ChatWindow: React.FC = () => {
                     </div>
                     <div className="flex-1 min-w-0">
                         <h2 className="text-lg font-semibold text-gray-900 truncate">
-                            {getConversationName()}
+                            {conversationName}
                         </h2>
                         <p className="text-sm text-gray-500">
                             {isGroup ? `${activeConversation?.participantesIds?.length || 0} members` : 'Direct message'}

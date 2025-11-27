@@ -72,7 +72,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         try {
             await get().joinConversation(conversationId);
             const messages = await MessageService.getMessages(conversationId, 1);
-            set({ messages: messages.reverse(), isLoading: false, hasMore: messages.length === 50 });
+            set({ messages, isLoading: false, hasMore: messages.length === 50 });
         } catch (error) {
             console.error('Failed to load messages', error);
             set({ isLoading: false });
@@ -121,20 +121,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
     },
 
     handleReceiveMessage: (message: MessageDto) => {
-        const { activeConversationId, messages, conversations } = get();
+        const { activeConversationId, messages, conversations, loadConversations } = get();
 
-        const updatedConversations = conversations.map(c => {
-            if (c.id === message.conversacionId) {
-                return {
-                    ...c,
-                    ultimoMensaje: message,
-                    mensajesNoLeidos: c.id === activeConversationId ? 0 : c.mensajesNoLeidos + 1
-                };
-            }
-            return c;
-        });
-
-        set({ conversations: updatedConversations });
+        // Check if the conversation exists in our list
+        const conversationExists = conversations.some(c => c.id === message.conversacionId);
+        
+        if (!conversationExists) {
+            // New conversation - reload the conversations list
+            loadConversations();
+        } else {
+            // Update existing conversation
+            const updatedConversations = conversations.map(c => {
+                if (c.id === message.conversacionId) {
+                    return {
+                        ...c,
+                        ultimoMensaje: message,
+                        mensajesNoLeidos: c.id === activeConversationId ? 0 : c.mensajesNoLeidos + 1
+                    };
+                }
+                return c;
+            });
+            set({ conversations: updatedConversations });
+        }
 
         if (activeConversationId === message.conversacionId) {
             if (!messages.find(m => m.id === message.id)) {
@@ -192,7 +200,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 set({ hasMore: false, isLoading: false });
             } else {
                 set({
-                    messages: [...newMessages.reverse(), ...messages],
+                    messages: [...newMessages, ...messages],
                     page: nextPage,
                     isLoading: false,
                     hasMore: newMessages.length === 50

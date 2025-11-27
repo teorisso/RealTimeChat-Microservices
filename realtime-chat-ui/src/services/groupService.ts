@@ -18,8 +18,7 @@ const GroupService = {
     },
 
     updateGroup: async (id: string, data: { nombre?: string; descripcion?: string; avatarUrl?: string }) => {
-        const response = await groupsApi.put<{ success: boolean; data: GrupoDto }>(`/groups/${id}`, data);
-        return response.data.data!;
+        await groupsApi.put(`/groups/${id}`, data);
     },
 
     deleteGroup: async (id: string) => {
