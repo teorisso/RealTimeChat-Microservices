@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { useChatStore } from '../../store/chatStore';
 import { useAuthStore } from '../../store/authStore';
 import { format } from 'date-fns';
@@ -10,15 +10,8 @@ interface ChatListProps {
 }
 
 const ChatList: React.FC<ChatListProps> = ({ onItemClick }) => {
-    const { conversations, activeConversationId, loadConversations, setActiveConversation, isLoading, users, loadUsers } = useChatStore();
+    const { conversations, activeConversationId, setActiveConversation, isLoading, users } = useChatStore();
     const { user } = useAuthStore();
-
-    useEffect(() => {
-        loadConversations();
-        if (users.length === 0) {
-            loadUsers();
-        }
-    }, [loadConversations, loadUsers, users.length]);
 
     const handleSelect = (id: string) => {
         setActiveConversation(id);

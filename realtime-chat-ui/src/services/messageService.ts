@@ -1,5 +1,5 @@
 import { messagesApi } from './api';
-import type { ConversationDto, MessageDto, ReadReceiptDto } from '../types';
+import type { ConversationDto, MessageDto } from '../types';
 
 const MessageService = {
     getConversations: async () => {
@@ -39,8 +39,8 @@ const MessageService = {
     },
 
     getMessageReceipts: async (messageId: string) => {
-        const response = await messagesApi.get<{ success: boolean; data: ReadReceiptDto[] }>(`/messages/${messageId}/receipts`);
-        return response.data.data || [];
+        const response = await messagesApi.get(`/messages/${messageId}/receipts`);
+        return response.data;
     },
 };
 

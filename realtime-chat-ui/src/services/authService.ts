@@ -25,12 +25,13 @@ const AuthService = {
     },
 
     getProfile: async () => {
-        const response = await authApi.get<{ success: boolean; data: UsuarioDto }>('/auth/profile');
-        return response.data.data!;
+        const response = await authApi.get<UsuarioDto>('/auth/profile');
+        return response.data;
     },
 
     updateProfile: async (data: { nombre?: string; avatarUrl?: string }) => {
-        await authApi.put('/auth/profile', data);
+        const response = await authApi.put<UsuarioDto>('/auth/profile', data);
+        return response.data;
     },
 
     getUsers: async () => {

@@ -44,6 +44,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
         try {
             const conversations = await MessageService.getConversations();
             set({ conversations, isLoading: false });
+            
+            // Join all conversations for real-time updates
+            for (const conv of conversations) {
+                try {
+                    await SignalRService.invoke('JoinConversation', Number(conv.id));
+                } catch {
+                    // Silently ignore - connection might not be ready yet
+                }
+            }
         } catch (error) {
             console.error('Failed to load conversations', error);
             set({ isLoading: false });
@@ -72,7 +81,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         try {
             await get().joinConversation(conversationId);
             const messages = await MessageService.getMessages(conversationId, 1);
-            set({ messages, isLoading: false, hasMore: messages.length === 50 });
+            set({ messages: messages.reverse(), isLoading: false, hasMore: messages.length === 50 });
         } catch (error) {
             console.error('Failed to load messages', error);
             set({ isLoading: false });
@@ -80,18 +89,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
     },
 
     sendMessage: async (content: string) => {
-        const { activeConversationId, messages } = get();
+        const { activeConversationId } = get();
         if (!activeConversationId) return;
 
         try {
-            const sentMessage = await MessageService.sendMessage({ conversacionId: Number(activeConversationId), contenido: content });
-
-            // Optimistically add message if not already present (SignalR might beat us)
-            if (!messages.find(m => m.id === sentMessage.id)) {
-                set({ messages: [...messages, sentMessage] });
-            }
+            // Use SignalR to send message - this will broadcast to all participants
+            await SignalRService.invoke('SendMessage', Number(activeConversationId), content);
         } catch (error) {
             console.error('Failed to send message', error);
+            // Fallback to HTTP if SignalR fails
+            try {
+                const sentMessage = await MessageService.sendMessage({ conversacionId: Number(activeConversationId), contenido: content });
+                const { messages } = get();
+                if (!messages.find(m => m.id === sentMessage.id)) {
+                    set({ messages: [...messages, sentMessage] });
+                }
+            } catch (httpError) {
+                console.error('HTTP fallback also failed', httpError);
+            }
         }
     },
 
@@ -121,28 +136,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
     },
 
     handleReceiveMessage: (message: MessageDto) => {
-        const { activeConversationId, messages, conversations, loadConversations } = get();
+        const { activeConversationId, messages, conversations } = get();
 
-        // Check if the conversation exists in our list
-        const conversationExists = conversations.some(c => c.id === message.conversacionId);
-        
-        if (!conversationExists) {
-            // New conversation - reload the conversations list
-            loadConversations();
-        } else {
-            // Update existing conversation
-            const updatedConversations = conversations.map(c => {
-                if (c.id === message.conversacionId) {
-                    return {
-                        ...c,
-                        ultimoMensaje: message,
-                        mensajesNoLeidos: c.id === activeConversationId ? 0 : c.mensajesNoLeidos + 1
-                    };
-                }
-                return c;
-            });
-            set({ conversations: updatedConversations });
-        }
+        const updatedConversations = conversations.map(c => {
+            if (c.id === message.conversacionId) {
+                return {
+                    ...c,
+                    ultimoMensaje: message,
+                    mensajesNoLeidos: c.id === activeConversationId ? 0 : c.mensajesNoLeidos + 1
+                };
+            }
+            return c;
+        });
+
+        set({ conversations: updatedConversations });
 
         if (activeConversationId === message.conversacionId) {
             if (!messages.find(m => m.id === message.id)) {
@@ -200,7 +207,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 set({ hasMore: false, isLoading: false });
             } else {
                 set({
-                    messages: [...newMessages, ...messages],
+                    messages: [...newMessages.reverse(), ...messages],
                     page: nextPage,
                     isLoading: false,
                     hasMore: newMessages.length === 50
