@@ -58,7 +58,9 @@ namespace MessagesService.Services
                 }
 
                 _context.Conversaciones.Add(conversacion);
-                // Removed intermediate SaveChangesAsync to perform single atomic commit
+                // Guardamos primero para asegurar que la conversación existe y tiene ID
+                // Esto evita errores de concurrencia con Npgsql y el pooler de Supabase
+                await _context.SaveChangesAsync();
 
                 // Agregar participantes
                 var participantes = new List<ParticipanteConversacion>();
@@ -67,7 +69,7 @@ namespace MessagesService.Services
                 {
                     participantes.Add(new ParticipanteConversacion
                     {
-                        Conversacion = conversacion, // Use navigation property
+                        ConversacionId = conversacion.Id,
                         UsuarioId = userId,
                         FechaUnion = DateTime.UtcNow,
                         Activo = true
@@ -75,7 +77,7 @@ namespace MessagesService.Services
 
                     participantes.Add(new ParticipanteConversacion
                     {
-                        Conversacion = conversacion, // Use navigation property
+                        ConversacionId = conversacion.Id,
                         UsuarioId = request.OtroUsuarioId!.Value,
                         FechaUnion = DateTime.UtcNow,
                         Activo = true
@@ -91,7 +93,7 @@ namespace MessagesService.Services
 
                     participantes.AddRange(miembros.Select(usuarioId => new ParticipanteConversacion
                     {
-                        Conversacion = conversacion, // Use navigation property
+                        ConversacionId = conversacion.Id,
                         UsuarioId = usuarioId,
                         FechaUnion = DateTime.UtcNow,
                         Activo = true
