@@ -42,8 +42,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
     loadConversations: async () => {
         set({ isLoading: true });
         try {
-            const conversations = await MessageService.getConversations();
-            set({ conversations, isLoading: false });
+            // Load users and conversations in parallel, wait for both to complete
+            const [conversations, users] = await Promise.all([
+                MessageService.getConversations(),
+                AuthService.getUsers()
+            ]);
+            
+            // DEBUG: Log data to verify what we're receiving
+            console.log('=== DEBUG: Loaded conversations ===', conversations);
+            console.log('=== DEBUG: Loaded users ===', users);
+            if (conversations.length > 0) {
+                console.log('=== DEBUG: First conversation keys ===', Object.keys(conversations[0]));
+                console.log('=== DEBUG: usuario1Id ===', conversations[0].usuario1Id);
+                console.log('=== DEBUG: Usuario1Id (PascalCase) ===', (conversations[0] as any).Usuario1Id);
+            }
+            
+            // Update both at the same time so names are available when conversations render
+            set({ conversations, users, isLoading: false });
             
             // Join all conversations for real-time updates
             for (const conv of conversations) {

@@ -26,11 +26,19 @@ const ChatList: React.FC<ChatListProps> = ({ onItemClick }) => {
         <div className="divide-y divide-gray-100">
             {conversations.map((chat) => {
                 const isGroup = chat.tipo === 'grupo';
-                const otherUserId = chat.usuario1Id === Number(user?.id) ? chat.usuario2Id : chat.usuario1Id;
+                const currentUserId = Number(user?.id);
+                
+                // Try using usuario1Id/usuario2Id first
+                let otherUserId = chat.usuario1Id === currentUserId ? chat.usuario2Id : chat.usuario1Id;
+                
+                // Fallback: use participantesIds to find the other user
+                if (otherUserId == null && chat.participantesIds?.length) {
+                    otherUserId = chat.participantesIds.find(id => id !== currentUserId);
+                }
                 
                 // Get the display name from loaded users
-                const otherUser = users.find(u => u.id === String(otherUserId));
-                const displayName = isGroup ? `Group ${chat.grupoId}` : (otherUser?.nombre || `User ${otherUserId}`);
+                const otherUser = otherUserId != null ? users.find(u => u.id === String(otherUserId)) : null;
+                const displayName = isGroup ? `Group ${chat.grupoId}` : (otherUser?.nombre || 'Chat');
 
                 return (
                     <button

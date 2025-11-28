@@ -5,7 +5,7 @@ import SignalRService from '../services/signalrService';
 
 export const useSignalRIntegration = () => {
     const { isAuthenticated } = useAuthStore();
-    const { handleReceiveMessage, handleTypingIndicator, handleReadReceipt, loadConversations, loadUsers } = useChatStore();
+    const { handleReceiveMessage, handleTypingIndicator, handleReadReceipt, loadConversations } = useChatStore();
 
     useEffect(() => {
         if (isAuthenticated) {
@@ -20,15 +20,13 @@ export const useSignalRIntegration = () => {
                 // Start connection, then load data
                 SignalRService.startConnection(token)
                     .then(() => {
-                        // Load conversations (which will join all groups)
+                        // Load conversations and users together
                         loadConversations();
-                        loadUsers();
                     })
                     .catch((err) => {
                         console.error('SignalR connection failed', err);
                         // Still try to load data even if SignalR fails
                         loadConversations();
-                        loadUsers();
                     });
             }
 
@@ -38,5 +36,5 @@ export const useSignalRIntegration = () => {
                 SignalRService.off('ReceiveReadReceipt', handleReadReceipt);
             };
         }
-    }, [isAuthenticated, handleReceiveMessage, handleTypingIndicator, handleReadReceipt, loadConversations, loadUsers]);
+    }, [isAuthenticated, handleReceiveMessage, handleTypingIndicator, handleReadReceipt, loadConversations]);
 };

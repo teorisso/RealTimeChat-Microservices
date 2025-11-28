@@ -187,14 +187,27 @@ namespace MessagesService.Services
         {
             try
             {
-                var conversacionesIds = await _context.ParticipantesConversacion
+                // Get conversation IDs from participantes_conversacion
+                var conversacionesIdsFromParticipants = await _context.ParticipantesConversacion
                     .Where(pc => pc.UsuarioId == userId && pc.Activo)
                     .Select(pc => pc.ConversacionId)
                     .ToListAsync();
 
+                // Also get direct conversations where user is Usuario1Id or Usuario2Id
+                var conversacionesIdsDirectas = await _context.Conversaciones
+                    .Where(c => c.Tipo == "directa" && (c.Usuario1Id == userId || c.Usuario2Id == userId))
+                    .Select(c => c.Id)
+                    .ToListAsync();
+
+                // Combine both lists and remove duplicates
+                var allConversacionesIds = conversacionesIdsFromParticipants
+                    .Union(conversacionesIdsDirectas)
+                    .Distinct()
+                    .ToList();
+
                 var conversaciones = new List<ConversationDto>();
 
-                foreach (var convId in conversacionesIds)
+                foreach (var convId in allConversacionesIds)
                 {
                     var conv = await GetConversationAsync(convId, userId);
                     if (conv != null)

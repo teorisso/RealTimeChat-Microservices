@@ -7,8 +7,15 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Data;
 using System.Text;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// --- CONFIGURACIÓN JSON (camelCase para compatibilidad con frontend) ---
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+});
 
 // --- CONFIGURACIÓN BASE DE DATOS ---
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");

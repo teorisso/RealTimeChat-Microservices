@@ -8,7 +8,7 @@ import TypingIndicator from './TypingIndicator';
 import { Loader2, Users, User } from 'lucide-react';
 
 const ChatWindow: React.FC = () => {
-    const { activeConversationId, messages, isLoading, conversations, loadMoreMessages, hasMore, users, loadUsers } = useChatStore();
+    const { activeConversationId, messages, isLoading, conversations, loadMoreMessages, hasMore, users } = useChatStore();
     const { user: currentUser } = useAuthStore();
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -16,12 +16,6 @@ const ChatWindow: React.FC = () => {
 
     const activeConversation = conversations.find(c => c.id === activeConversationId);
     const isGroup = activeConversation?.tipo === 'grupo';
-
-    useEffect(() => {
-        if (users.length === 0) {
-            loadUsers();
-        }
-    }, [users.length, loadUsers]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -52,16 +46,31 @@ const ChatWindow: React.FC = () => {
         }
     };
 
-    const getConversationName = () => {
-        if (!activeConversation) return '';
-        if (isGroup) return `Group ${activeConversation.grupoId}`; // Ideally fetch group name too
+    const getOtherUser = () => {
+        if (!activeConversation || isGroup) return null;
 
-        const otherUserId = activeConversation.usuario1Id === Number(currentUser?.id)
+        // Try using usuario1Id/usuario2Id first
+        const currentUserId = Number(currentUser?.id);
+        let otherUserId = activeConversation.usuario1Id === currentUserId
             ? activeConversation.usuario2Id
             : activeConversation.usuario1Id;
 
-        const otherUser = users.find(u => u.id === String(otherUserId));
-        return otherUser?.nombre || `User ${otherUserId}`;
+        // Fallback: use participantesIds to find the other user
+        if (otherUserId == null && activeConversation.participantesIds?.length) {
+            otherUserId = activeConversation.participantesIds.find(id => id !== currentUserId);
+        }
+
+        if (otherUserId == null) return null;
+
+        return users.find(u => u.id === String(otherUserId));
+    };
+
+    const getConversationName = () => {
+        if (!activeConversation) return '';
+        if (isGroup) return `Group ${activeConversation.grupoId}`;
+
+        const otherUser = getOtherUser();
+        return otherUser?.nombre || 'Chat';
     };
 
     if (!activeConversationId) {
@@ -94,7 +103,9 @@ const ChatWindow: React.FC = () => {
                             {getConversationName()}
                         </h2>
                         <p className="text-sm text-gray-500">
-                            {isGroup ? `${activeConversation?.participantesIds?.length || 0} members` : 'Direct message'}
+                            {isGroup 
+                                ? `${activeConversation?.participantesIds?.length || 0} members` 
+                                : (getOtherUser()?.email || 'Direct message')}
                         </p>
                     </div>
                 </div>
