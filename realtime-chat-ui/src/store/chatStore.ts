@@ -81,7 +81,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         try {
             await get().joinConversation(conversationId);
             const messages = await MessageService.getMessages(conversationId, 1);
-            set({ messages: messages.reverse(), isLoading: false, hasMore: messages.length === 50 });
+            set({ messages, isLoading: false, hasMore: messages.length === 50 });
         } catch (error) {
             console.error('Failed to load messages', error);
             set({ isLoading: false });
@@ -207,7 +207,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 set({ hasMore: false, isLoading: false });
             } else {
                 set({
-                    messages: [...newMessages.reverse(), ...messages],
+                    messages: [...newMessages, ...messages],
                     page: nextPage,
                     isLoading: false,
                     hasMore: newMessages.length === 50

@@ -30,11 +30,19 @@ export const useAuthStore = create<AuthState>((set) => ({
 
     checkAuth: async () => {
         const token = localStorage.getItem('accessToken');
+        const savedUser = localStorage.getItem('user');
+        
+        // Cargar usuario de localStorage inmediatamente
+        if (savedUser) {
+            set({ user: JSON.parse(savedUser), isAuthenticated: !!token, isLoading: true });
+        }
+        
         if (token) {
             try {
                 const user = await AuthService.getProfile();
+                localStorage.setItem('user', JSON.stringify(user));
                 set({ user, isAuthenticated: true, isLoading: false });
-            } catch (error) {
+            } catch {
                 set({ user: null, isAuthenticated: false, isLoading: false });
             }
         } else {
