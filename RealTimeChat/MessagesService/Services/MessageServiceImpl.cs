@@ -69,6 +69,19 @@ namespace MessagesService.Services
                         .FirstOrDefaultAsync();
                     
                     conversacionId = result;
+
+                    // CRÍTICO: Agregar AMBOS usuarios como participantes de la conversación directa
+                    var fechaUnion = DateTime.UtcNow;
+                    await _context.Database.ExecuteSqlRawAsync(
+                        $@"INSERT INTO participantes_conversacion (""ConversacionId"", ""UsuarioId"", ""FechaUnion"", ""Activo"") 
+                           VALUES ({conversacionId}, {userId}, '{fechaUnion:yyyy-MM-dd HH:mm:ss.ffffff}', true)");
+                    
+                    await _context.Database.ExecuteSqlRawAsync(
+                        $@"INSERT INTO participantes_conversacion (""ConversacionId"", ""UsuarioId"", ""FechaUnion"", ""Activo"") 
+                           VALUES ({conversacionId}, {request.OtroUsuarioId.Value}, '{fechaUnion:yyyy-MM-dd HH:mm:ss.ffffff}', true)");
+                    
+                    _logger.LogInformation("Conversación directa {ConversacionId} creada con participantes {UserId1} y {UserId2}", 
+                        conversacionId, userId, request.OtroUsuarioId.Value);
                 }
                 else if (request.Tipo == "grupo")
                 {
@@ -483,6 +496,62 @@ namespace MessagesService.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error al marcar mensaje {MessageId} como leído", messageId);
+                return false;
+            }
+        }
+
+        public async Task<bool> MarkAllMessagesAsReadAsync(int conversationId, int userId)
+        {
+            try
+            {
+                // Verificar que el usuario está en la conversación
+                if (!await IsUserInConversationAsync(conversationId, userId))
+                    return false;
+
+                // Obtener todos los mensajes no leídos de esta conversación
+                var mensajesNoLeidos = await _context.Mensajes
+                    .Where(m => m.ConversacionId == conversationId &&
+                                m.RemitenteId != userId &&
+                                !m.Eliminado &&
+                                !m.Lecturas.Any(l => l.UsuarioId == userId))
+                    .Select(m => m.Id)
+                    .ToListAsync();
+
+                if (!mensajesNoLeidos.Any())
+                    return true; // Ya están todos leídos
+
+                // Obtener los IDs que ya están marcados como leídos (para evitar duplicados)
+                var yaLeidos = await _context.MensajesLeidos
+                    .Where(ml => mensajesNoLeidos.Contains(ml.MensajeId) && ml.UsuarioId == userId)
+                    .Select(ml => ml.MensajeId)
+                    .ToListAsync();
+
+                // Filtrar solo los que realmente necesitan marcarse
+                var mensajesAMarcar = mensajesNoLeidos.Except(yaLeidos).ToList();
+
+                if (!mensajesAMarcar.Any())
+                    return true;
+
+                // Crear read receipts para todos los mensajes no leídos
+                var fechaLectura = DateTime.UtcNow;
+                var readReceipts = mensajesAMarcar.Select(mensajeId => new MensajeLeido
+                {
+                    MensajeId = mensajeId,
+                    UsuarioId = userId,
+                    FechaLectura = fechaLectura
+                }).ToList();
+
+                _context.MensajesLeidos.AddRange(readReceipts);
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation("Marcados {Count} mensajes como leídos para usuario {UserId} en conversación {ConversationId}",
+                    readReceipts.Count, userId, conversationId);
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al marcar todos los mensajes como leídos en conversación {ConversationId}", conversationId);
                 return false;
             }
         }

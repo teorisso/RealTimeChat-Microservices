@@ -131,6 +131,21 @@ namespace MessagesService.Endpoints
             .RequireAuthorization()
             .WithOpenApi();
 
+            group.MapPost("/conversations/{conversationId}/read-all", async (int conversationId, IMessageService service, ClaimsPrincipal user) =>
+            {
+                var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (!int.TryParse(userIdClaim, out var userId))
+                    return Results.Unauthorized();
+
+                var success = await service.MarkAllMessagesAsReadAsync(conversationId, userId);
+                if (!success)
+                    return Results.BadRequest(ApiResponse<object>.FailureResponse("No se pudieron marcar los mensajes como leídos"));
+
+                return Results.Ok(ApiResponse<object>.SuccessResponse(null, "Todos los mensajes marcados como leídos"));
+            })
+            .RequireAuthorization()
+            .WithOpenApi();
+
             group.MapGet("/{messageId}/receipts", async (int messageId, IMessageService service, ClaimsPrincipal user) =>
             {
                 var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
