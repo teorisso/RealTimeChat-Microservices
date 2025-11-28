@@ -22,5 +22,6 @@ namespace MessagesService.Entities
         public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
 
         public ICollection<Mensaje> Mensajes { get; set; } = new List<Mensaje>();
+        public ICollection<ParticipanteConversacion> Participantes { get; set; } = new List<ParticipanteConversacion>();
     }
 }

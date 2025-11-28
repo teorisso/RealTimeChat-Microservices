@@ -23,7 +23,11 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 
 builder.Services.AddDbContext<MessagesDbContext>(options =>
 {
-    options.UseNpgsql(connectionString);
+    options.UseNpgsql(connectionString, npgsqlOptions =>
+    {
+        // Deshabilitar batching para compatibilidad con Supabase Transaction Pooler
+        npgsqlOptions.MaxBatchSize(1);
+    });
 });
 
 // --- CONFIGURACIÓN JWT SETTINGS ---

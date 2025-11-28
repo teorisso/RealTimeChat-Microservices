@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import ChatList from '../chat/ChatList';
 import { useAuthStore } from '../../store/authStore';
-import { LogOut, Plus, MessageSquarePlus } from 'lucide-react';
+import { LogOut, Plus, MessageSquarePlus, Users } from 'lucide-react';
 import CreateGroupModal from '../groups/CreateGroupModal';
 import NewChatModal from '../chat/NewChatModal';
+import GroupsListModal from '../groups/GroupsListModal';
 
 interface SidebarProps {
     onClose?: () => void;
@@ -13,6 +14,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
     const { user, logout } = useAuthStore();
     const [showCreateGroup, setShowCreateGroup] = useState(false);
     const [showNewChat, setShowNewChat] = useState(false);
+    const [showGroupsList, setShowGroupsList] = useState(false);
 
     return (
         <div className="flex flex-col h-full">
@@ -33,6 +35,13 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
                         title="New Chat"
                     >
                         <MessageSquarePlus className="w-5 h-5" />
+                    </button>
+                    <button
+                        onClick={() => setShowGroupsList(true)}
+                        className="p-2 rounded-full text-gray-500 hover:bg-gray-200"
+                        title="My Groups"
+                    >
+                        <Users className="w-5 h-5" />
                     </button>
                     <button
                         onClick={() => setShowCreateGroup(true)}
@@ -58,6 +67,10 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
 
             {showNewChat && (
                 <NewChatModal onClose={() => setShowNewChat(false)} />
+            )}
+
+            {showGroupsList && (
+                <GroupsListModal onClose={() => setShowGroupsList(false)} />
             )}
         </div>
     );
