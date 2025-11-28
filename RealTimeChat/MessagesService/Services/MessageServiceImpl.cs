@@ -28,27 +28,19 @@ namespace MessagesService.Services
         {
             try
             {
-                int conversacionId;
-                
+                var conversacion = new Conversacion
+                {
+                    Tipo = request.Tipo,
+                    FechaCreacion = DateTime.UtcNow
+                };
+
                 if (request.Tipo == "directa")
                 {
                     if (!request.OtroUsuarioId.HasValue)
                         return null;
 
-                    // Insertar conversación usando interpolación de cadenas para evitar problemas con RETURNING
-                    var fechaCreacion = DateTime.UtcNow;
-                    await _context.Database.ExecuteSqlRawAsync(
-                        $@"INSERT INTO conversaciones (""FechaCreacion"", ""GrupoId"", ""Tipo"", ""Usuario1Id"", ""Usuario2Id"") 
-                          VALUES ('{fechaCreacion:yyyy-MM-dd HH:mm:ss.ffffff}', NULL, '{request.Tipo}', {userId}, {request.OtroUsuarioId.Value})");
-
-                    // Obtener el último ID insertado de forma más simple
-                    var result = await _context.Conversaciones
-                        .Where(c => c.Usuario1Id == userId && c.Usuario2Id == request.OtroUsuarioId.Value && c.Tipo == "directa")
-                        .OrderByDescending(c => c.Id)
-                        .Select(c => c.Id)
-                        .FirstOrDefaultAsync();
-                    
-                    conversacionId = result;
+                    conversacion.Usuario1Id = userId;
+                    conversacion.Usuario2Id = request.OtroUsuarioId.Value;
                 }
                 else if (request.Tipo == "grupo")
                 {
@@ -62,41 +54,54 @@ namespace MessagesService.Services
                     if (!isMember)
                         return null;
 
-                    // Insertar conversación de grupo
-                    var fechaCreacion = DateTime.UtcNow;
-                    await _context.Database.ExecuteSqlRawAsync(
-                        $@"INSERT INTO conversaciones (""FechaCreacion"", ""GrupoId"", ""Tipo"", ""Usuario1Id"", ""Usuario2Id"") 
-                          VALUES ('{fechaCreacion:yyyy-MM-dd HH:mm:ss.ffffff}', {request.GrupoId.Value}, '{request.Tipo}', NULL, NULL)");
+                    conversacion.GrupoId = request.GrupoId.Value;
+                }
 
-                    // Obtener el último ID insertado
-                    var result = await _context.Conversaciones
-                        .Where(c => c.GrupoId == request.GrupoId.Value && c.Tipo == "grupo")
-                        .OrderByDescending(c => c.Id)
-                        .Select(c => c.Id)
-                        .FirstOrDefaultAsync();
-                    
-                    conversacionId = result;
+                _context.Conversaciones.Add(conversacion);
+                // Removed intermediate SaveChangesAsync to perform single atomic commit
 
-                    // Para grupos, agregar participantes
+                // Agregar participantes
+                var participantes = new List<ParticipanteConversacion>();
+
+                if (request.Tipo == "directa")
+                {
+                    participantes.Add(new ParticipanteConversacion
+                    {
+                        Conversacion = conversacion, // Use navigation property
+                        UsuarioId = userId,
+                        FechaUnion = DateTime.UtcNow,
+                        Activo = true
+                    });
+
+                    participantes.Add(new ParticipanteConversacion
+                    {
+                        Conversacion = conversacion, // Use navigation property
+                        UsuarioId = request.OtroUsuarioId!.Value,
+                        FechaUnion = DateTime.UtcNow,
+                        Activo = true
+                    });
+                }
+                else if (request.Tipo == "grupo")
+                {
+                    // Agregar todos los miembros activos del grupo como participantes
                     var miembros = await _context.GrupoMiembros
                         .Where(gm => gm.GrupoId == request.GrupoId && gm.Activo)
                         .Select(gm => gm.UsuarioId)
                         .ToListAsync();
 
-                    foreach (var miembroId in miembros)
+                    participantes.AddRange(miembros.Select(usuarioId => new ParticipanteConversacion
                     {
-                        var fechaUnion = DateTime.UtcNow;
-                        await _context.Database.ExecuteSqlRawAsync(
-                            $@"INSERT INTO participantes_conversacion (""ConversacionId"", ""UsuarioId"", ""FechaUnion"", ""Activo"") 
-                              VALUES ({conversacionId}, {miembroId}, '{fechaUnion:yyyy-MM-dd HH:mm:ss.ffffff}', true)");
-                    }
-                }
-                else
-                {
-                    return null;
+                        Conversacion = conversacion, // Use navigation property
+                        UsuarioId = usuarioId,
+                        FechaUnion = DateTime.UtcNow,
+                        Activo = true
+                    }));
                 }
 
-                return await GetConversationAsync(conversacionId, userId);
+                _context.ParticipantesConversacion.AddRange(participantes);
+                await _context.SaveChangesAsync();
+
+                return await GetConversationAsync(conversacion.Id, userId);
             }
             catch (Exception ex)
             {
