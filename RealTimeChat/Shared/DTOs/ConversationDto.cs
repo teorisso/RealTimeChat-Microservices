@@ -7,6 +7,7 @@ namespace Shared.DTOs
         public int? Usuario1Id { get; set; }
         public int? Usuario2Id { get; set; }
         public int? GrupoId { get; set; }
+        public string? GrupoNombre { get; set; } // Nombre del grupo
         public DateTime FechaCreacion { get; set; }
         public MessageDto? UltimoMensaje { get; set; }
         public int MensajesNoLeidos { get; set; }

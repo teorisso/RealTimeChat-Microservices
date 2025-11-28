@@ -34,16 +34,10 @@ const NewChatModal: React.FC<NewChatModalProps> = ({ onClose }) => {
     }, [currentUser]);
 
     const handleStartChat = async (userId: string) => {
-        setStartingChatId(userId);
-        try {
-            const conversation = await MessageService.getDirectConversation(userId);
-            await loadConversations();
-            setActiveConversation(conversation.id);
-            onClose();
-        } catch (error) {
-            console.error('Failed to start chat', error);
-            setStartingChatId(null);
-        }
+        // No crear conversación todavía, solo establecer un "draft"
+        // La conversación se creará al enviar el primer mensaje
+        setActiveConversation(`draft_${userId}`);
+        onClose();
     };
 
     const filteredUsers = users.filter(u =>

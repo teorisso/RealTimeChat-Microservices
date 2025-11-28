@@ -30,10 +30,19 @@ export const useSignalRIntegration = () => {
                     });
             }
 
+            // Polling: Recargar conversaciones cada 30 segundos para detectar nuevos grupos
+            // IMPORTANTE: preserveUnreadCounts=true para no sobrescribir contadores de SignalR
+            const pollingInterval = setInterval(() => {
+                if (isAuthenticated) {
+                    loadConversations(true); // true = preservar contadores de mensajes no leídos
+                }
+            }, 30000); // 30 segundos
+
             return () => {
                 SignalRService.off('ReceiveMessage', handleReceiveMessage);
                 SignalRService.off('ReceiveTypingIndicator', handleTypingIndicator);
                 SignalRService.off('ReceiveReadReceipt', handleReadReceipt);
+                clearInterval(pollingInterval);
             };
         }
     }, [isAuthenticated, handleReceiveMessage, handleTypingIndicator, handleReadReceipt, loadConversations]);

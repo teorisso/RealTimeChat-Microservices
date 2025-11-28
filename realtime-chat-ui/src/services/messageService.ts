@@ -29,7 +29,7 @@ const MessageService = {
         return response.data.data || [];
     },
 
-    sendMessage: async (data: { conversacionId: number; contenido: string }) => {
+    sendMessage: async (data: { conversacionId: number; contenido: string; destinatarioId?: number }) => {
         const response = await messagesApi.post<{ success: boolean; data: MessageDto }>('/messages', data);
         return response.data.data!;
     },

@@ -35,13 +35,33 @@ namespace MessagesService.Services
                     if (!request.OtroUsuarioId.HasValue)
                         return null;
 
-                    // Insertar conversación usando interpolación de cadenas para evitar problemas con RETURNING
+                    // Validar que no sea la misma persona
+                    if (userId == request.OtroUsuarioId.Value)
+                    {
+                        _logger.LogWarning("Intento de crear conversación directa consigo mismo: UserId={UserId}", userId);
+                        return null;
+                    }
+
+                    // Verificar si ya existe una conversación (en ambas direcciones)
+                    var conversacionExistente = await _context.Conversaciones
+                        .FirstOrDefaultAsync(c => c.Tipo == "directa" &&
+                                                  ((c.Usuario1Id == userId && c.Usuario2Id == request.OtroUsuarioId.Value) ||
+                                                   (c.Usuario1Id == request.OtroUsuarioId.Value && c.Usuario2Id == userId)));
+                    
+                    if (conversacionExistente != null)
+                    {
+                        _logger.LogInformation("Conversación directa {ConversacionId} ya existe entre usuarios {UserId1} y {UserId2}", 
+                            conversacionExistente.Id, userId, request.OtroUsuarioId.Value);
+                        return await GetConversationAsync(conversacionExistente.Id, userId);
+                    }
+
+                    // Crear nueva conversación directa
                     var fechaCreacion = DateTime.UtcNow;
                     await _context.Database.ExecuteSqlRawAsync(
                         $@"INSERT INTO conversaciones (""FechaCreacion"", ""GrupoId"", ""Tipo"", ""Usuario1Id"", ""Usuario2Id"") 
                           VALUES ('{fechaCreacion:yyyy-MM-dd HH:mm:ss.ffffff}', NULL, '{request.Tipo}', {userId}, {request.OtroUsuarioId.Value})");
 
-                    // Obtener el último ID insertado de forma más simple
+                    // Obtener el último ID insertado
                     var result = await _context.Conversaciones
                         .Where(c => c.Usuario1Id == userId && c.Usuario2Id == request.OtroUsuarioId.Value && c.Tipo == "directa")
                         .OrderByDescending(c => c.Id)
@@ -61,6 +81,35 @@ namespace MessagesService.Services
 
                     if (!isMember)
                         return null;
+
+                    // Buscar conversación existente para este grupo
+                    var conversacionExistente = await _context.Conversaciones
+                        .FirstOrDefaultAsync(c => c.GrupoId == request.GrupoId.Value && c.Tipo == "grupo");
+                    
+                    if (conversacionExistente != null)
+                    {
+                        // La conversación ya existe, verificar que el usuario es participante
+                        var isParticipant = await _context.ParticipantesConversacion
+                            .AnyAsync(pc => pc.ConversacionId == conversacionExistente.Id && 
+                                           pc.UsuarioId == userId && pc.Activo);
+                        
+                        if (!isParticipant)
+                        {
+                            // Agregar al usuario como participante
+                            var fechaUnion = DateTime.UtcNow;
+                            await _context.Database.ExecuteSqlRawAsync(
+                                $@"INSERT INTO participantes_conversacion (""ConversacionId"", ""UsuarioId"", ""FechaUnion"", ""Activo"") 
+                                   VALUES ({conversacionExistente.Id}, {userId}, '{fechaUnion:yyyy-MM-dd HH:mm:ss.ffffff}', true)");
+                        }
+                        
+                        _logger.LogInformation("Conversación de grupo {ConversacionId} ya existe para GrupoId {GrupoId}", 
+                            conversacionExistente.Id, request.GrupoId.Value);
+                        
+                        return await GetConversationAsync(conversacionExistente.Id, userId);
+                    }
+
+                    // FALLBACK: Si no existe, crearla (no debería pasar si GroupsService funciona bien)
+                    _logger.LogWarning("Creando conversación de grupo faltante para GrupoId {GrupoId}", request.GrupoId.Value);
 
                     // Insertar conversación de grupo
                     var fechaCreacion = DateTime.UtcNow;
@@ -158,6 +207,17 @@ namespace MessagesService.Services
                     .Select(pc => pc.UsuarioId)
                     .ToListAsync();
 
+                // Obtener nombre del grupo si es conversación de grupo
+                string? grupoNombre = null;
+                if (conversacion.Tipo == "grupo" && conversacion.GrupoId.HasValue)
+                {
+                    var grupo = await _context.Grupos
+                        .Where(g => g.Id == conversacion.GrupoId.Value)
+                        .Select(g => g.Nombre)
+                        .FirstOrDefaultAsync();
+                    grupoNombre = grupo;
+                }
+
                 return new ConversationDto
                 {
                     Id = conversacion.Id.ToString(),
@@ -165,6 +225,7 @@ namespace MessagesService.Services
                     Usuario1Id = conversacion.Usuario1Id,
                     Usuario2Id = conversacion.Usuario2Id,
                     GrupoId = conversacion.GrupoId,
+                    GrupoNombre = grupoNombre,
                     FechaCreacion = conversacion.FechaCreacion,
                     UltimoMensaje = ultimoMensaje,
                     MensajesNoLeidos = mensajesNoLeidos,
@@ -253,13 +314,38 @@ namespace MessagesService.Services
         {
             try
             {
+                int conversacionId = request.ConversacionId;
+                
+                // Si no hay conversacionId pero hay destinatarioId, crear conversación directa automáticamente
+                if (conversacionId == 0 && request.DestinatarioId.HasValue)
+                {
+                    _logger.LogInformation("Creando conversación directa automáticamente entre {UserId1} y {UserId2}", 
+                        userId, request.DestinatarioId.Value);
+                    
+                    var createRequest = new CreateConversationRequest
+                    {
+                        Tipo = "directa",
+                        OtroUsuarioId = request.DestinatarioId.Value
+                    };
+                    
+                    var conversation = await CreateConversationAsync(userId, createRequest);
+                    if (conversation == null)
+                    {
+                        _logger.LogError("No se pudo crear conversación directa entre {UserId1} y {UserId2}", 
+                            userId, request.DestinatarioId.Value);
+                        return null;
+                    }
+                    
+                    conversacionId = int.Parse(conversation.Id);
+                }
+
                 // Verificar autorización
-                if (!await IsUserInConversationAsync(request.ConversacionId, userId))
+                if (!await IsUserInConversationAsync(conversacionId, userId))
                     return null;
 
                 var mensaje = new Mensaje
                 {
-                    ConversacionId = request.ConversacionId,
+                    ConversacionId = conversacionId,
                     RemitenteId = userId,
                     Contenido = request.Contenido,
                     FechaEnvio = DateTime.UtcNow,

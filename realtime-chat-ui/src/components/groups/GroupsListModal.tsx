@@ -31,19 +31,37 @@ const GroupsListModal: React.FC<GroupsListModalProps> = ({ onClose }) => {
     }, []);
 
     const handleStartGroupChat = async (groupId: number) => {
+        // Evitar múltiples clics
+        if (startingChatId !== null) return;
+        
         setStartingChatId(groupId);
         try {
-            // Crear conversación de grupo
-            const conversation = await MessageService.createConversation({
-                tipo: 'grupo',
-                grupoId: groupId
-            });
-            
+            // Recargar conversaciones para asegurarnos de tener las más recientes
             await loadConversations();
-            setActiveConversation(conversation.id);
-            onClose();
+            
+            // Buscar la conversación existente para este grupo
+            const { conversations } = useChatStore.getState();
+            const conversation = conversations.find(c => c.grupoId === groupId);
+            
+            if (conversation) {
+                // La conversación ya existe (debería existir desde que se creó el grupo)
+                setActiveConversation(conversation.id);
+                onClose();
+            } else {
+                // FALLBACK: Si no existe, crearla (no debería pasar normalmente)
+                console.warn('Conversación de grupo no encontrada, creando fallback para grupoId:', groupId);
+                const newConversation = await MessageService.createConversation({
+                    tipo: 'grupo',
+                    grupoId: groupId
+                });
+                
+                await loadConversations();
+                setActiveConversation(newConversation.id);
+                onClose();
+            }
         } catch (error) {
             console.error('Failed to start group chat', error);
+        } finally {
             setStartingChatId(null);
         }
     };

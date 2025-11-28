@@ -27,6 +27,7 @@ export interface ConversationDto {
     usuario1Id?: number;
     usuario2Id?: number;
     grupoId?: number;
+    grupoNombre?: string; // NUEVO: Nombre del grupo
     fechaCreacion: string;
     ultimoMensaje?: MessageDto;
     mensajesNoLeidos: number;

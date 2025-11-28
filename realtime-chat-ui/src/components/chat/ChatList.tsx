@@ -38,7 +38,7 @@ const ChatList: React.FC<ChatListProps> = ({ onItemClick }) => {
                 
                 // Get the display name from loaded users
                 const otherUser = otherUserId != null ? users.find(u => u.id === String(otherUserId)) : null;
-                const displayName = isGroup ? `Group ${chat.grupoId}` : (otherUser?.nombre || 'Chat');
+                const displayName = isGroup ? (chat.grupoNombre || `Group ${chat.grupoId}`) : (otherUser?.nombre || 'Chat');
 
                 return (
                     <button

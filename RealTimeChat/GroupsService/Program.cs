@@ -22,7 +22,17 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 
 builder.Services.AddDbContext<GroupsDbContext>(options =>
 {
-    options.UseNpgsql(connectionString);
+    options.UseNpgsql(connectionString, npgsqlOptions =>
+    {
+        // Deshabilitar batching para compatibilidad con Supabase Transaction Pooler
+        npgsqlOptions.MaxBatchSize(1);
+        
+        // Configuración adicional para evitar problemas con el pooler
+        npgsqlOptions.CommandTimeout(60);
+    });
+    
+    // Deshabilitar pooling a nivel de EF Core para debugging
+    options.EnableSensitiveDataLogging();
 });
 
 // --- CONFIGURACIÓN JWT SETTINGS ---
@@ -88,18 +98,18 @@ builder.Services.AddSwaggerGen();
 var app = builder.Build();
 
 // --- MIGRACIONES AUTOMÁTICAS ---
+// DESHABILITADAS TEMPORALMENTE PARA DEBUGGING
+// Las migraciones ya están aplicadas en la base de datos
+/*
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
     try
     {
         var context = services.GetRequiredService<GroupsDbContext>();
-        var groupsMigrationExists = await GroupsMigrationExists(context);
-
-        if (!groupsMigrationExists)
-        {
-            await context.Database.MigrateAsync();
-        }
+        
+        // Aplicar migraciones siempre (EF Core es idempotente, no duplicará migraciones)
+        await context.Database.MigrateAsync();
 
         // SEED DATA (opcional)
         await SeedData(context);
@@ -110,6 +120,7 @@ using (var scope = app.Services.CreateScope())
         logger.LogError(ex, "Error al aplicar migraciones o crear seed data");
     }
 }
+*/
 
 // --- CONFIGURACIÓN PIPELINE ---
 if (app.Environment.IsDevelopment())
@@ -153,42 +164,4 @@ static async Task SeedData(GroupsDbContext context)
     // Por ahora no agregamos datos de prueba
 }
 
-// Verifica si las migraciones específicas de GroupsService ya están aplicadas
-static async Task<bool> GroupsMigrationExists(GroupsDbContext context)
-{
-    var conn = context.Database.GetDbConnection();
-    var wasClosed = conn.State == ConnectionState.Closed;
-
-    if (wasClosed)
-    {
-        await conn.OpenAsync();
-    }
-
-    try
-    {
-        await using var cmd = conn.CreateCommand();
-        // Verificar si existe la migración específica de GroupsService
-        cmd.CommandText = """
-            select exists (
-                select 1
-                from "__EFMigrationsHistory"
-                where "MigrationId" = '20251126161627_InitialGroupsSchema'
-            );
-            """;
-
-        var result = await cmd.ExecuteScalarAsync();
-        return result is bool b && b;
-    }
-    catch
-    {
-        // Si la tabla __EFMigrationsHistory no existe, retornar false
-        return false;
-    }
-    finally
-    {
-        if (wasClosed && conn.State == ConnectionState.Open)
-        {
-            await conn.CloseAsync();
-        }
-    }
-}
+// Nota: Se removió GroupsMigrationExists porque puede causar problemas con el pool de conexiones

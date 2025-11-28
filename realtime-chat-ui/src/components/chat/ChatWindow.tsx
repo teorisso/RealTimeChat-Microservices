@@ -47,6 +47,12 @@ const ChatWindow: React.FC = () => {
     };
 
     const getOtherUser = () => {
+        // Manejar conversaciones draft
+        if (activeConversationId?.startsWith('draft_')) {
+            const otherUserId = activeConversationId.replace('draft_', '');
+            return users.find(u => u.id === otherUserId);
+        }
+
         if (!activeConversation || isGroup) return null;
 
         // Try using usuario1Id/usuario2Id first
@@ -66,8 +72,14 @@ const ChatWindow: React.FC = () => {
     };
 
     const getConversationName = () => {
+        // Manejar conversaciones draft
+        if (activeConversationId?.startsWith('draft_')) {
+            const otherUser = getOtherUser();
+            return otherUser?.nombre || 'New Chat';
+        }
+
         if (!activeConversation) return '';
-        if (isGroup) return `Group ${activeConversation.grupoId}`;
+        if (isGroup) return activeConversation.grupoNombre || `Group ${activeConversation.grupoId}`;
 
         const otherUser = getOtherUser();
         return otherUser?.nombre || 'Chat';

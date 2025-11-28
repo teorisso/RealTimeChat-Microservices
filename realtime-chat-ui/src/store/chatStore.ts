@@ -14,7 +14,7 @@ interface ChatState {
     page: number;
     hasMore: boolean;
 
-    loadConversations: () => Promise<void>;
+    loadConversations: (preserveUnreadCounts?: boolean) => Promise<void>;
     loadUsers: () => Promise<void>;
     setActiveConversation: (conversationId: string) => Promise<void>;
     sendMessage: (content: string) => Promise<void>;
@@ -39,7 +39,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     page: 1,
     hasMore: true,
 
-    loadConversations: async () => {
+    loadConversations: async (preserveUnreadCounts = false) => {
         set({ isLoading: true });
         try {
             // Load users and conversations in parallel, wait for both to complete
@@ -48,17 +48,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 AuthService.getUsers()
             ]);
             
-            // DEBUG: Log data to verify what we're receiving
-            console.log('=== DEBUG: Loaded conversations ===', conversations);
-            console.log('=== DEBUG: Loaded users ===', users);
-            if (conversations.length > 0) {
-                console.log('=== DEBUG: First conversation keys ===', Object.keys(conversations[0]));
-                console.log('=== DEBUG: usuario1Id ===', conversations[0].usuario1Id);
-                console.log('=== DEBUG: Usuario1Id (PascalCase) ===', (conversations[0] as any).Usuario1Id);
+            // Si preserveUnreadCounts es true, mantener los contadores actuales del estado
+            if (preserveUnreadCounts) {
+                const { conversations: currentConversations } = get();
+                const mergedConversations = conversations.map(newConv => {
+                    const existing = currentConversations.find(c => c.id === newConv.id);
+                    if (existing) {
+                        // Mantener el contador de no leídos del estado actual si es mayor
+                        // Esto evita que el polling sobrescriba incrementos de SignalR
+                        return {
+                            ...newConv,
+                            mensajesNoLeidos: Math.max(existing.mensajesNoLeidos, newConv.mensajesNoLeidos),
+                            ultimoMensaje: newConv.ultimoMensaje || existing.ultimoMensaje
+                        };
+                    }
+                    return newConv;
+                });
+                
+                set({ conversations: mergedConversations, users, isLoading: false });
+            } else {
+                // Carga inicial o forzada - usar valores del backend
+                set({ conversations, users, isLoading: false });
             }
-            
-            // Update both at the same time so names are available when conversations render
-            set({ conversations, users, isLoading: false });
             
             // Join all conversations for real-time updates
             for (const conv of conversations) {
@@ -97,6 +108,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
             await get().joinConversation(conversationId);
             const messages = await MessageService.getMessages(conversationId, 1);
             set({ messages, isLoading: false, hasMore: messages.length === 50 });
+            
+            // IMPORTANTE: Resetear el contador de no leídos INMEDIATAMENTE al abrir el chat
+            const { conversations } = get();
+            const updatedConversations = conversations.map(c => 
+                c.id === conversationId ? { ...c, mensajesNoLeidos: 0 } : c
+            );
+            set({ conversations: updatedConversations });
         } catch (error) {
             console.error('Failed to load messages', error);
             set({ isLoading: false });
@@ -107,6 +125,41 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const { activeConversationId } = get();
         if (!activeConversationId) return;
 
+        // Detectar si es una conversación draft (directa que aún no existe)
+        const isDraft = activeConversationId.startsWith('draft_');
+        
+        if (isDraft) {
+            // Extraer el ID del otro usuario
+            const otherUserId = Number(activeConversationId.replace('draft_', ''));
+            
+            try {
+                // Enviar mensaje directo (el backend creará la conversación automáticamente)
+                const sentMessage = await MessageService.sendMessage({ 
+                    conversacionId: 0,  // 0 indica que no hay conversación todavía
+                    contenido: content,
+                    destinatarioId: otherUserId 
+                });
+                
+                if (sentMessage) {
+                    // Recargar conversaciones para obtener la recién creada
+                    await get().loadConversations();
+                    
+                    // Cambiar a la conversación real
+                    set({ 
+                        activeConversationId: sentMessage.conversacionId,
+                        messages: [sentMessage]
+                    });
+                    
+                    // Unirse a la conversación en SignalR
+                    await SignalRService.invoke('JoinConversation', Number(sentMessage.conversacionId));
+                }
+            } catch (error) {
+                console.error('Failed to send draft message', error);
+            }
+            return;
+        }
+
+        // Envío normal de mensaje en conversación existente
         try {
             // Use SignalR to send message - this will broadcast to all participants
             await SignalRService.invoke('SendMessage', Number(activeConversationId), content);
@@ -150,22 +203,44 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
     },
 
-    handleReceiveMessage: (message: MessageDto) => {
+    handleReceiveMessage: async (message: MessageDto) => {
         const { activeConversationId, messages, conversations } = get();
 
+        // Verificar si la conversación existe en el estado actual
+        const conversationExists = conversations.some(c => c.id === message.conversacionId);
+        
+        if (!conversationExists) {
+            // Si la conversación no existe (ej: te agregaron a un grupo nuevo), recargar todas las conversaciones
+            console.log('Nueva conversación detectada, recargando lista...');
+            await get().loadConversations();
+            return;
+        }
+
+        // Actualizar la conversación existente
         const updatedConversations = conversations.map(c => {
             if (c.id === message.conversacionId) {
+                // Si es la conversación activa, no incrementar no leídos
+                // Si no es la activa, calcular correctamente los no leídos
+                const isActive = c.id === activeConversationId;
                 return {
                     ...c,
                     ultimoMensaje: message,
-                    mensajesNoLeidos: c.id === activeConversationId ? 0 : c.mensajesNoLeidos + 1
+                    mensajesNoLeidos: isActive ? 0 : c.mensajesNoLeidos + 1
                 };
             }
             return c;
         });
 
-        set({ conversations: updatedConversations });
+        // Reordenar conversaciones por último mensaje
+        const sortedConversations = updatedConversations.sort((a, b) => {
+            const dateA = a.ultimoMensaje?.fechaEnvio || a.fechaCreacion;
+            const dateB = b.ultimoMensaje?.fechaEnvio || b.fechaCreacion;
+            return new Date(dateB).getTime() - new Date(dateA).getTime();
+        });
 
+        set({ conversations: sortedConversations });
+
+        // Si el mensaje es de la conversación activa, agregarlo a los mensajes
         if (activeConversationId === message.conversacionId) {
             if (!messages.find(m => m.id === message.id)) {
                 set({ messages: [...messages, message] });
