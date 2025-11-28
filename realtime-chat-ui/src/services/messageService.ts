@@ -38,6 +38,10 @@ const MessageService = {
         await messagesApi.post(`/messages/${messageId}/read`);
     },
 
+    markAllAsRead: async (conversationId: string) => {
+        await messagesApi.post(`/messages/conversations/${conversationId}/read-all`);
+    },
+
     getMessageReceipts: async (messageId: string) => {
         const response = await messagesApi.get(`/messages/${messageId}/receipts`);
         return response.data;
